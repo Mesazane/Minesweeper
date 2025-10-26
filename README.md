@@ -3,7 +3,7 @@
 # Board Config (Default)
 BOARD_SIZE = 15
 
-BOMB_COUNT = 30
+BOMB_COUNT = 30 (This functions as the default bomb count in the gamenodelay variant)
 
 STEP_LIMIT = 20
 
