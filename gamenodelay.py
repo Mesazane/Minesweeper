@@ -143,11 +143,11 @@ class MinesweeperGUI:
         self.csp_button.pack(side=tk.LEFT, padx=4)
         
         # Auto run buttons
-        self.auto_cp_button = tk.Button(self.control_frame, text="Auto CP (100x)",
+        self.auto_cp_button = tk.Button(self.control_frame, text="Auto CP (1000x)",
                                          command=self.run_auto_cp, **button_style)
         self.auto_cp_button.pack(side=tk.LEFT, padx=4)
         
-        self.auto_csp_button = tk.Button(self.control_frame, text="Auto CSP (100x)",
+        self.auto_csp_button = tk.Button(self.control_frame, text="Auto CSP (1000x)",
                                           command=self.run_auto_csp, **button_style)
         self.auto_csp_button.pack(side=tk.LEFT, padx=4)
 
@@ -506,7 +506,7 @@ class MinesweeperGUI:
         self.auto_csp_button.config(state=tk.DISABLED)
         self.bomb_dropdown.config(state=tk.DISABLED)
         
-        self.root.title(f"Auto CP Running: 0/100")
+        self.root.title(f"Auto CP Running: 0/1000")
         self.continue_auto_run()
     
     def run_auto_csp(self):
@@ -527,14 +527,14 @@ class MinesweeperGUI:
         self.auto_csp_button.config(state=tk.DISABLED)
         self.bomb_dropdown.config(state=tk.DISABLED)
         
-        self.root.title(f"Auto CSP Running: 0/100")
+        self.root.title(f"Auto CSP Running: 0/1000")
         self.continue_auto_run()
     
     def continue_auto_run(self):
         if not self.auto_run_active:
             return
         
-        if self.auto_run_count >= 100:
+        if self.auto_run_count >= 1000:
             self.finish_auto_run()
             return
         
@@ -546,7 +546,7 @@ class MinesweeperGUI:
         
         # Start next run
         self.auto_run_count += 1
-        self.root.title(f"Auto {self.auto_run_solver_type} Running: {self.auto_run_count}/100")
+        self.root.title(f"Auto {self.auto_run_solver_type} Running: {self.auto_run_count}/1000")
         
         # Reset game for next iteration
         self.setup_game_for_auto_run()
@@ -661,13 +661,13 @@ class MinesweeperGUI:
         self.bomb_dropdown.config(state='readonly')
         
         # Calculate statistics
-        success_rate = (self.auto_run_wins / 100) * 100
+        success_rate = (self.auto_run_wins / 1000) * 100
         
         # Show results
-        result_message = f"""Auto {self.auto_run_solver_type} Solver - 100 Runs Completed
+        result_message = f"""Auto {self.auto_run_solver_type} Solver - 1000 Runs Completed
         
 Bomb Count: {self.bomb_count}
-Total Runs: 100
+Total Runs: 1000
 Wins: {self.auto_run_wins}
 Losses: {self.auto_run_losses}
 Success Rate: {success_rate:.1f}%"""
