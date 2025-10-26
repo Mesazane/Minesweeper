@@ -150,6 +150,22 @@ class MinesweeperGUI:
         self.auto_csp_button = tk.Button(self.control_frame, text="Auto CSP (1000x)",
                                           command=self.run_auto_csp, **button_style)
         self.auto_csp_button.pack(side=tk.LEFT, padx=4)
+        
+        # Stop button (initially hidden)
+        stop_button_style = {
+            'font': FONT_CONTROL_BTN,
+            'bg': '#DC3545',  # Red background
+            'fg': '#FFFFFF',  # White text
+            'activebackground': '#C82333',  # Darker red on hover
+            'activeforeground': '#FFFFFF',
+            'relief': tk.FLAT,
+            'bd': 0,
+            'padx': 10,
+            'pady': 5
+        }
+        self.stop_button = tk.Button(self.control_frame, text="Stop",
+                                      command=self.stop_auto_run, **stop_button_style)
+        # Don't pack it yet - will show only during auto run
 
         self.reset_button = tk.Button(self.control_frame, text="Reset",
                                       command=self.setup_game, **button_style)
@@ -499,12 +515,14 @@ class MinesweeperGUI:
         self.auto_run_losses = 0
         self.auto_run_solver_type = "CP"
         
-        # Disable buttons during auto run
-        self.cp_button.config(state=tk.DISABLED)
-        self.csp_button.config(state=tk.DISABLED)
-        self.auto_cp_button.config(state=tk.DISABLED)
-        self.auto_csp_button.config(state=tk.DISABLED)
+        # Disable buttons and show stop button
+        self.cp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
+        self.csp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
+        self.auto_cp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
+        self.auto_csp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
         self.bomb_dropdown.config(state=tk.DISABLED)
+        self.reset_button.pack_forget()
+        self.stop_button.pack(side=tk.LEFT, padx=(4, 10))
         
         self.root.title(f"Auto CP Running: 0/1000")
         self.continue_auto_run()
@@ -520,15 +538,51 @@ class MinesweeperGUI:
         self.auto_run_losses = 0
         self.auto_run_solver_type = "CSP"
         
-        # Disable buttons during auto run
-        self.cp_button.config(state=tk.DISABLED)
-        self.csp_button.config(state=tk.DISABLED)
-        self.auto_cp_button.config(state=tk.DISABLED)
-        self.auto_csp_button.config(state=tk.DISABLED)
+        # Disable buttons and show stop button
+        self.cp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
+        self.csp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
+        self.auto_cp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
+        self.auto_csp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
         self.bomb_dropdown.config(state=tk.DISABLED)
+        self.reset_button.pack_forget()
+        self.stop_button.pack(side=tk.LEFT, padx=(4, 10))
         
         self.root.title(f"Auto CSP Running: 0/1000")
         self.continue_auto_run()
+    
+    def stop_auto_run(self):
+        """Stop the auto run and show results for completed runs."""
+        if not self.auto_run_active:
+            return
+        
+        # Mark as inactive to stop the loop
+        self.auto_run_active = False
+        
+        # Show results for whatever has been completed
+        if self.auto_run_count > 0:
+            success_rate = (self.auto_run_wins / self.auto_run_count) * 100
+            
+            result_message = f"""Auto {self.auto_run_solver_type} Solver - STOPPED
+            
+Bomb Count: {self.bomb_count}
+Total Runs Completed: {self.auto_run_count}
+Wins: {self.auto_run_wins}
+Losses: {self.auto_run_losses}
+Success Rate: {success_rate:.1f}%"""
+            
+            messagebox.showinfo("Auto Run Stopped", result_message)
+        
+        # Re-enable buttons and hide stop button
+        self.cp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
+        self.csp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
+        self.auto_cp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
+        self.auto_csp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
+        self.bomb_dropdown.config(state='readonly')
+        self.stop_button.pack_forget()
+        self.reset_button.pack(side=tk.LEFT, padx=(4, 10))
+        
+        self.root.title("Minesweeper CSP vs CP (15x15)")
+        self.setup_game()
     
     def continue_auto_run(self):
         if not self.auto_run_active:
@@ -589,8 +643,9 @@ class MinesweeperGUI:
             self.run_csp_solver_silent()
     
     def run_cp_solver_silent(self):
-        if self.game_over:
-            self.continue_auto_run()
+        if self.game_over or not self.auto_run_active:
+            if self.auto_run_active:
+                self.continue_auto_run()
             return
             
         if self.cells_opened == 0:
@@ -603,19 +658,20 @@ class MinesweeperGUI:
                     break
         
         change_made = True
-        while change_made and not self.game_over:
+        while change_made and not self.game_over and self.auto_run_active:
             change_made = self.cp_solver_step()
             self.root.update()
             self.check_win_condition()
             
         # If stuck, count as loss and continue
-        if not self.game_over and not change_made:
+        if self.auto_run_active and not self.game_over and not change_made:
             self.auto_run_losses += 1
             self.continue_auto_run()
     
     def run_csp_solver_silent(self):
-        if self.game_over:
-            self.continue_auto_run()
+        if self.game_over or not self.auto_run_active:
+            if self.auto_run_active:
+                self.continue_auto_run()
             return
             
         if self.cells_opened == 0:
@@ -628,11 +684,11 @@ class MinesweeperGUI:
                     break
             self.root.update()
 
-        while not self.game_over:
+        while not self.game_over and self.auto_run_active:
             cp_made_move = self.cp_solver_step()
             self.root.update()
             self.check_win_condition()
-            if self.game_over:
+            if self.game_over or not self.auto_run_active:
                 break 
             
             if cp_made_move:
@@ -641,24 +697,27 @@ class MinesweeperGUI:
             csp_made_move = self.csp_solver_1ply_step()
             self.root.update()
             self.check_win_condition()
-            if self.game_over: 
+            if self.game_over or not self.auto_run_active: 
                 break
 
             if not csp_made_move: 
                 # Stuck, count as loss
-                self.auto_run_losses += 1
-                self.continue_auto_run()
+                if self.auto_run_active:
+                    self.auto_run_losses += 1
+                    self.continue_auto_run()
                 break
     
     def finish_auto_run(self):
         self.auto_run_active = False
         
-        # Re-enable buttons
-        self.cp_button.config(state=tk.NORMAL)
-        self.csp_button.config(state=tk.NORMAL)
-        self.auto_cp_button.config(state=tk.NORMAL)
-        self.auto_csp_button.config(state=tk.NORMAL)
+        # Re-enable buttons and hide stop button
+        self.cp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
+        self.csp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
+        self.auto_cp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
+        self.auto_csp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
         self.bomb_dropdown.config(state='readonly')
+        self.stop_button.pack_forget()
+        self.reset_button.pack(side=tk.LEFT, padx=(4, 10))
         
         # Calculate statistics
         success_rate = (self.auto_run_wins / 1000) * 100

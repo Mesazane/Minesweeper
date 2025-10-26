@@ -1,10 +1,10 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 import random
 
 # Board Config
 BOARD_SIZE = 15
-BOMB_COUNT = 30
+DEFAULT_BOMB_COUNT = 30
 STEP_LIMIT = 20
 
 # Interface Config
@@ -41,6 +41,15 @@ class MinesweeperGUI:
         self.root.title("Minesweeper CSP vs CP (15x15)")
         self.root.configure(bg=COLOR_PANEL_BG)
 
+        self.bomb_count = DEFAULT_BOMB_COUNT
+        
+        # Auto run tracking
+        self.auto_run_active = False
+        self.auto_run_count = 0
+        self.auto_run_wins = 0
+        self.auto_run_losses = 0
+        self.auto_run_solver_type = None
+
         self.control_frame = tk.Frame(root, bg=COLOR_PANEL_BG)
         self.control_frame.pack(pady=10)
 
@@ -65,7 +74,7 @@ class MinesweeperGUI:
         self.board_status = [['H' for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
 
         bombs_planted_count = 0
-        while bombs_planted_count < BOMB_COUNT:
+        while bombs_planted_count < self.bomb_count:
             row = random.randint(0, BOARD_SIZE - 1)
             col = random.randint(0, BOARD_SIZE - 1)
             if self.board_logic[row][col] == 0:
@@ -95,11 +104,21 @@ class MinesweeperGUI:
                 self.board_logic[r][c] = bomb_neighbors_count
 
     def create_control_widgets(self):
+        # Bomb selection dropdown
+        tk.Label(self.control_frame, text="Bombs:", font=FONT_STATUS_LABEL, 
+                 bg=COLOR_PANEL_BG, fg=COLOR_PANEL_FG).pack(side=tk.LEFT, padx=(10, 5), pady=5)
+        
+        self.bomb_var = tk.StringVar(value=str(self.bomb_count))
+        self.bomb_dropdown = ttk.Combobox(self.control_frame, textvariable=self.bomb_var, 
+                                          values=['10', '20', '30'], state='readonly', width=5)
+        self.bomb_dropdown.pack(side=tk.LEFT, padx=(0, 10), pady=5)
+        self.bomb_dropdown.bind('<<ComboboxSelected>>', self.on_bomb_count_changed)
+        
         self.steps_label = tk.Label(self.control_frame, text=f"Steps Left: {self.steps_left}",
                                      font=FONT_STATUS_LABEL, bg=COLOR_PANEL_BG, fg=COLOR_PANEL_FG)
         self.steps_label.pack(side=tk.LEFT, padx=10, pady=5)
 
-        self.bombs_label = tk.Label(self.control_frame, text=f"Bombs: {self.bombs_flagged}/{BOMB_COUNT}",
+        self.bombs_label = tk.Label(self.control_frame, text=f"Flagged: {self.bombs_flagged}/{self.bomb_count}",
                                      font=FONT_STATUS_LABEL, bg=COLOR_PANEL_BG, fg=COLOR_PANEL_FG)
         self.bombs_label.pack(side=tk.LEFT, padx=10, pady=5)
 
@@ -124,6 +143,31 @@ class MinesweeperGUI:
         self.csp_button = tk.Button(self.control_frame, text="CSP Solver", state=tk.NORMAL,
                                      command=self.run_csp_solver, **button_style)
         self.csp_button.pack(side=tk.LEFT, padx=4)
+        
+        # Auto run buttons
+        self.auto_cp_button = tk.Button(self.control_frame, text="Auto CP (1000x)",
+                                         command=self.run_auto_cp, **button_style)
+        self.auto_cp_button.pack(side=tk.LEFT, padx=4)
+        
+        self.auto_csp_button = tk.Button(self.control_frame, text="Auto CSP (1000x)",
+                                          command=self.run_auto_csp, **button_style)
+        self.auto_csp_button.pack(side=tk.LEFT, padx=4)
+        
+        # Stop button (initially hidden)
+        stop_button_style = {
+            'font': FONT_CONTROL_BTN,
+            'bg': '#DC3545',  # Red background
+            'fg': '#FFFFFF',  # White text
+            'activebackground': '#C82333',  # Darker red on hover
+            'activeforeground': '#FFFFFF',
+            'relief': tk.FLAT,
+            'bd': 0,
+            'padx': 10,
+            'pady': 5
+        }
+        self.stop_button = tk.Button(self.control_frame, text="Stop",
+                                      command=self.stop_auto_run, **stop_button_style)
+        # Don't pack it yet - will show only during auto run
 
         self.reset_button = tk.Button(self.control_frame, text="Reset",
                                       command=self.setup_game, **button_style)
@@ -169,8 +213,12 @@ class MinesweeperGUI:
 
         if self.steps_left <= 0 and count > 0:
             self.game_over = True
-            messagebox.showerror("Game Over", "Out of steps! All bombs exploded.")
-            self.reveal_board(show_bombs=True)
+            if self.auto_run_active:
+                self.auto_run_losses += 1
+                self.continue_auto_run()
+            else:
+                messagebox.showerror("Game Over", "Out of steps! All bombs exploded.")
+                self.reveal_board(show_bombs=True)
 
     def handle_left_click(self, r, c):
         if self.game_over or self.board_status[r][c] != 'H':
@@ -181,8 +229,12 @@ class MinesweeperGUI:
         if self.board_logic[r][c] == -1:
             self.buttons[r][c].config(text="💣", bg="red", relief=tk.FLAT, state=tk.DISABLED)
             self.game_over = True
-            messagebox.showerror("Game Over", "You clicked on a bomb!")
-            self.reveal_board(show_bombs=True)
+            if self.auto_run_active:
+                self.auto_run_losses += 1
+                self.continue_auto_run()
+            else:
+                messagebox.showerror("Game Over", "You clicked on a bomb!")
+                self.reveal_board(show_bombs=True)
         else:
             self.open_cell_recursive(r, c)
             self.check_win_condition()
@@ -200,7 +252,7 @@ class MinesweeperGUI:
             self.buttons[r][c].config(text=" ", bg=COLOR_CELL_HIDDEN)
             self.bombs_flagged -= 1
         
-        self.bombs_label.config(text=f"Bombs: {self.bombs_flagged}/{BOMB_COUNT}")
+        self.bombs_label.config(text=f"Flagged: {self.bombs_flagged}/{self.bomb_count}")
 
     def open_cell_recursive(self, r, c):
         if not (0 <= r < BOARD_SIZE and 0 <= c < BOARD_SIZE):
@@ -233,10 +285,14 @@ class MinesweeperGUI:
         if self.game_over:
             return
         
-        if self.cells_opened == (BOARD_SIZE * BOARD_SIZE) - BOMB_COUNT:
+        if self.cells_opened == (BOARD_SIZE * BOARD_SIZE) - self.bomb_count:
             self.game_over = True
-            messagebox.showinfo("Congratulations!", "You won!")
-            self.reveal_board(show_flags=True)
+            if self.auto_run_active:
+                self.auto_run_wins += 1
+                self.continue_auto_run()
+            else:
+                messagebox.showinfo("Congratulations!", "You won!")
+                self.reveal_board(show_flags=True)
 
     def reveal_board(self, show_bombs=False, show_flags=False):
         for r in range(BOARD_SIZE):
@@ -323,7 +379,7 @@ class MinesweeperGUI:
                             self.buttons[nr][nc].config(text="🚩", bg=COLOR_FLAG)
                             self.bombs_flagged += 1
                             change_made_in_step = True
-                        self.bombs_label.config(text=f"Bombs: {self.bombs_flagged}/{BOMB_COUNT}")
+                        self.bombs_label.config(text=f"Flagged: {self.bombs_flagged}/{self.bomb_count}")
 
                     if cell_value == flagged_neighbors_count and len(hidden_neighbors) > 0:
                         for (nr, nc) in hidden_neighbors:
@@ -388,7 +444,7 @@ class MinesweeperGUI:
                 self.board_status[r][c] = 'F'
                 self.buttons[r][c].config(text="🚩", bg=COLOR_FLAG) 
                 self.bombs_flagged += 1
-                self.bombs_label.config(text=f"Bombs: {self.bombs_flagged}/{BOMB_COUNT}")
+                self.bombs_label.config(text=f"Flagged: {self.bombs_flagged}/{self.bomb_count}")
                 if not self.game_over:
                     self.update_steps_display() 
                 return True 
@@ -464,6 +520,244 @@ class MinesweeperGUI:
             return
         else:
             self.open_cell_recursive(r, c)
+    
+    def on_bomb_count_changed(self, event=None):
+        new_count = int(self.bomb_var.get())
+        if new_count != self.bomb_count:
+            self.bomb_count = new_count
+            self.setup_game()
+    
+    def run_auto_cp(self):
+        if self.auto_run_active:
+            messagebox.showwarning("Auto Run", "Auto run already in progress!")
+            return
+        
+        self.auto_run_active = True
+        self.auto_run_count = 0
+        self.auto_run_wins = 0
+        self.auto_run_losses = 0
+        self.auto_run_solver_type = "CP"
+        
+        # Disable buttons and show stop button
+        self.cp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
+        self.csp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
+        self.auto_cp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
+        self.auto_csp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
+        self.bomb_dropdown.config(state=tk.DISABLED)
+        self.reset_button.pack_forget()
+        self.stop_button.pack(side=tk.LEFT, padx=(4, 10))
+        
+        self.root.title(f"Auto CP Running: 0/1000")
+        self.continue_auto_run()
+    
+    def run_auto_csp(self):
+        if self.auto_run_active:
+            messagebox.showwarning("Auto Run", "Auto run already in progress!")
+            return
+        
+        self.auto_run_active = True
+        self.auto_run_count = 0
+        self.auto_run_wins = 0
+        self.auto_run_losses = 0
+        self.auto_run_solver_type = "CSP"
+        
+        # Disable buttons and show stop button
+        self.cp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
+        self.csp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
+        self.auto_cp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
+        self.auto_csp_button.config(state=tk.DISABLED, bg='#CCCCCC', fg='#666666')
+        self.bomb_dropdown.config(state=tk.DISABLED)
+        self.reset_button.pack_forget()
+        self.stop_button.pack(side=tk.LEFT, padx=(4, 10))
+        
+        self.root.title(f"Auto CSP Running: 0/1000")
+        self.continue_auto_run()
+    
+    def stop_auto_run(self):
+        """Stop the auto run and show results for completed runs."""
+        if not self.auto_run_active:
+            return
+        
+        # Mark as inactive to stop the loop
+        self.auto_run_active = False
+        
+        # Show results for whatever has been completed
+        if self.auto_run_count > 0:
+            success_rate = (self.auto_run_wins / self.auto_run_count) * 100
+            
+            result_message = f"""Auto {self.auto_run_solver_type} Solver - STOPPED
+            
+Bomb Count: {self.bomb_count}
+Total Runs Completed: {self.auto_run_count}
+Wins: {self.auto_run_wins}
+Losses: {self.auto_run_losses}
+Success Rate: {success_rate:.1f}%"""
+            
+            messagebox.showinfo("Auto Run Stopped", result_message)
+        
+        # Re-enable buttons and hide stop button
+        self.cp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
+        self.csp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
+        self.auto_cp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
+        self.auto_csp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
+        self.bomb_dropdown.config(state='readonly')
+        self.stop_button.pack_forget()
+        self.reset_button.pack(side=tk.LEFT, padx=(4, 10))
+        
+        self.root.title("Minesweeper CSP vs CP (15x15)")
+        self.setup_game()
+    
+    def continue_auto_run(self):
+        if not self.auto_run_active:
+            return
+        
+        if self.auto_run_count >= 1000:
+            self.finish_auto_run()
+            return
+        
+        # Check if current game is over
+        if self.game_over:
+            # Count as loss if game over and not a win
+            if self.cells_opened != (BOARD_SIZE * BOARD_SIZE) - self.bomb_count:
+                self.auto_run_losses += 1
+        
+        # Start next run
+        self.auto_run_count += 1
+        self.root.title(f"Auto {self.auto_run_solver_type} Running: {self.auto_run_count}/1000")
+        
+        # Reset game for next iteration
+        self.setup_game_for_auto_run()
+        
+        # Run solver after short delay to allow UI update
+        self.root.after(10, self.run_auto_solver_iteration)
+    
+    def setup_game_for_auto_run(self):
+        # Reset game state without recreating widgets
+        self.steps_left = STEP_LIMIT
+        self.game_over = False
+        self.bombs_flagged = 0
+        self.cells_opened = 0
+        self.board_logic = [[0 for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
+        self.board_status = [['H' for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
+
+        bombs_planted_count = 0
+        while bombs_planted_count < self.bomb_count:
+            row = random.randint(0, BOARD_SIZE - 1)
+            col = random.randint(0, BOARD_SIZE - 1)
+            if self.board_logic[row][col] == 0:
+                self.board_logic[row][col] = -1
+                bombs_planted_count += 1
+
+        self.calculate_neighbor_numbers()
+        
+        # Reset all buttons visually
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                self.buttons[r][c].config(text=" ", bg=COLOR_CELL_HIDDEN, 
+                                         relief=tk.FLAT, state=tk.NORMAL,
+                                         disabledforeground="black")
+        
+        self.update_steps_display(count=0)
+    
+    def run_auto_solver_iteration(self):
+        if self.auto_run_solver_type == "CP":
+            self.run_cp_solver_silent()
+        else:
+            self.run_csp_solver_silent()
+    
+    def run_cp_solver_silent(self):
+        if self.game_over or not self.auto_run_active:
+            if self.auto_run_active:
+                self.continue_auto_run()
+            return
+            
+        if self.cells_opened == 0:
+            while True:
+                r = random.randint(0, BOARD_SIZE - 1)
+                c = random.randint(0, BOARD_SIZE - 1)
+                if self.board_logic[r][c] != -1:
+                    self.safe_ai_click(r, c) 
+                    self.update_steps_display() 
+                    break
+        
+        change_made = True
+        while change_made and not self.game_over and self.auto_run_active:
+            change_made = self.cp_solver_step()
+            self.root.update()
+            self.check_win_condition()
+            
+        # If stuck, count as loss and continue
+        if self.auto_run_active and not self.game_over and not change_made:
+            self.auto_run_losses += 1
+            self.continue_auto_run()
+    
+    def run_csp_solver_silent(self):
+        if self.game_over or not self.auto_run_active:
+            if self.auto_run_active:
+                self.continue_auto_run()
+            return
+            
+        if self.cells_opened == 0:
+            while True:
+                r = random.randint(0, BOARD_SIZE - 1)
+                c = random.randint(0, BOARD_SIZE - 1)
+                if self.board_logic[r][c] != -1:
+                    self.safe_ai_click(r, c)
+                    self.update_steps_display() 
+                    break
+            self.root.update()
+
+        while not self.game_over and self.auto_run_active:
+            cp_made_move = self.cp_solver_step()
+            self.root.update()
+            self.check_win_condition()
+            if self.game_over or not self.auto_run_active:
+                break 
+            
+            if cp_made_move:
+                continue
+
+            csp_made_move = self.csp_solver_1ply_step()
+            self.root.update()
+            self.check_win_condition()
+            if self.game_over or not self.auto_run_active: 
+                break
+
+            if not csp_made_move: 
+                # Stuck, count as loss
+                if self.auto_run_active:
+                    self.auto_run_losses += 1
+                    self.continue_auto_run()
+                break
+    
+    def finish_auto_run(self):
+        self.auto_run_active = False
+        
+        # Re-enable buttons and hide stop button
+        self.cp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
+        self.csp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
+        self.auto_cp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
+        self.auto_csp_button.config(state=tk.NORMAL, bg=COLOR_PANEL_FG, fg=COLOR_PANEL_BG)
+        self.bomb_dropdown.config(state='readonly')
+        self.stop_button.pack_forget()
+        self.reset_button.pack(side=tk.LEFT, padx=(4, 10))
+        
+        # Calculate statistics
+        success_rate = (self.auto_run_wins / 1000) * 100
+        
+        # Show results
+        result_message = f"""Auto {self.auto_run_solver_type} Solver - 1000 Runs Completed
+        
+Bomb Count: {self.bomb_count}
+Total Runs: 1000
+Wins: {self.auto_run_wins}
+Losses: {self.auto_run_losses}
+Success Rate: {success_rate:.1f}%"""
+        
+        messagebox.showinfo("Auto Run Complete", result_message)
+        
+        self.root.title("Minesweeper CSP vs CP (15x15)")
+        self.setup_game()
 
 # Main Program Execution
 if __name__ == "__main__":
