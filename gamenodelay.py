@@ -16,9 +16,9 @@ COLOR_CELL_HIDDEN = "#DCDCDC"
 COLOR_CELL_OPEN = "#FFFFFF"     
 COLOR_GAME_BG = "#BDBDBD"       
 
-FONT_CONTROL_BTN = ("Calibri", 11)        
-FONT_STATUS_LABEL = ("Calibri", 12) 
-FONT_CELL_NUMBER = ("Calibri", 10)      
+FONT_CONTROL_BTN = ("Segoe UI", 11)        
+FONT_STATUS_LABEL = ("Segoe UI", 12, "bold") 
+FONT_CELL_NUMBER = ("Consolas", 10, "bold")      
 
 NUMBER_COLOR_MAP = {
     1: "#0000FF",
